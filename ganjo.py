@@ -1571,6 +1571,7 @@ Kirim pesan langsung ke grup.
   — /info — Lihat informasi tentang bot
   — /debug_grup — Debug info grup yang terdeteksi
   — /myid — Lihat ID Telegram kamu
+  — /cekid <username> — Cek ID akun lain dari username
   — /restart — Restart bot
 ============================
 Cara mendapatkan ID pesan channel:
@@ -1981,6 +1982,61 @@ async def leave_cmd(event):
     except Exception as e:
         logging.error(f"Error pada /leave: {e}")
         await event.respond(f"Error: {e}")
+
+@client.on(events.NewMessage(pattern=r'^/cekid\b'))
+async def cekid_cmd(event):
+    if not await require_allowed(event):
+        return
+    parts = event.message.raw_text.split()
+    if len(parts) < 2:
+        return await event.respond(
+            "Format: /cekid <username>\n"
+            "Contoh: /cekid @namausername\n"
+            "Bisa juga tanpa @: /cekid namausername"
+        )
+    target = parts[1].strip().lstrip('@')
+    try:
+        entity = await client.get_entity(target)
+        nama = getattr(entity, 'first_name', None) or getattr(entity, 'title', None) or "Tanpa Nama"
+        last_name = getattr(entity, 'last_name', None)
+        if last_name:
+            nama += f" {last_name}"
+        uname = getattr(entity, 'username', None)
+        uname_str = f"@{uname}" if uname else "(tanpa username)"
+        eid = entity.id
+
+        # Deteksi tipe entity
+        from telethon.tl.types import User, Channel, Chat
+        if isinstance(entity, User):
+            tipe = "👤 User"
+            if getattr(entity, 'bot', False):
+                tipe = "🤖 Bot"
+        elif isinstance(entity, Channel):
+            if getattr(entity, 'megagroup', False):
+                tipe = "👥 Supergroup"
+            elif getattr(entity, 'broadcast', False):
+                tipe = "📢 Channel"
+            else:
+                tipe = "👥 Group"
+        elif isinstance(entity, Chat):
+            tipe = "👥 Group"
+        else:
+            tipe = "❓ Unknown"
+
+        await event.respond(
+            f"Info akun @{target}:\n\n"
+            f"Nama: {nama}\n"
+            f"Username: {uname_str}\n"
+            f"ID: {eid}\n"
+            f"Tipe: {tipe}\n\n"
+            f"Gunakan ID ini untuk /adduser {eid}"
+        )
+    except ValueError:
+        await event.respond(f"❌ Username @{target} tidak ditemukan.")
+    except Exception as e:
+        logging.error(f"Error pada /cekid: {e}")
+        await event.respond(f"❌ Gagal cek ID: {e}")
+        
 @client.on(events.NewMessage(pattern=r'^/myid\b'))
 async def myid_cmd(event):
     sender = await event.get_sender()
@@ -2035,4 +2091,5 @@ async def main():
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
+
     asyncio.run(main())
